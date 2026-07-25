@@ -35,7 +35,7 @@ export default function Dashboard() {
         {/* Welcome */}
         <div className="mb-14">
           <h1 className="font-heading text-4xl font-bold text-black mb-3">
-            Welcome{user?.name ? , ${user.name} : ''}
+           Welcome{user?.name ? `, ${user.name}` : ''}
           </h1>
 
           <p className="text-charcoal text-lg leading-relaxed max-w-3xl">
