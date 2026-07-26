@@ -73,9 +73,11 @@ export default function LandingPage() {
             aria-label="Main"
           >
             <div className="flex items-center gap-3 shrink-0">
-              <div className="w-8 h-8 rounded-full border border-ash/40 flex items-center justify-center" aria-hidden="true">
-                <div className="w-3 h-3 rounded-full bg-black/70" />
-              </div>
+              <img
+  src="/altiq-logo.png"
+  alt="ALTIQ AI"
+  className="w-8 h-8 object-contain"
+/>
               <span className="font-heading font-bold tracking-wide text-lg whitespace-nowrap">ALTIQ AI</span>
             </div>
 
@@ -274,15 +276,18 @@ export default function LandingPage() {
       </section>
 
       {/* FOOTER */}
-      <footer className="relative z-10 border-t border-ash/25 py-14 px-5">
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-full border border-ash/40 flex items-center justify-center" aria-hidden="true">
-              <div className="w-2.5 h-2.5 rounded-full bg-black/70" />
-            </div>
-            <span className="font-heading font-bold">ALTIQ AI</span>
-          </div>
-          <div className="flex gap-8 text-sm text-dark-ash">
+<footer className="relative z-10 border-t border-ash/25 py-14 px-5">
+  <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+    <div className="flex items-center gap-3">
+      <img
+        src="/altiq-logo.png"
+        alt="ALTIQ AI"
+        className="w-7 h-7 object-contain"
+      />
+      <span className="font-heading font-bold">ALTIQ AI</span>
+    </div>
+
+    <div className="flex gap-8 text-sm text-dark-ash">
             <a
               href="https://x.com/Altiq_AI"
               target="_blank"
