@@ -11,4 +11,4 @@ The Vite dev server runs on http://localhost:5173 and proxies `/api` requests to
 
 ## Logo
 
-Place the official logo at `public/altiq-logo.svg`. Until then a simple orbital mark is used automatically.
+Place the official logo at `public/altiq-logo.png`. Until then a simple orbital mark is used automatically.
