@@ -1,17 +1,7 @@
-async function request(projectId, path, options = {}) {
-  const res = await fetch(`/api/projects/${projectId}${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    const err = new Error(data.message || 'Request failed');
-    err.code = data.code;
-    throw err;
-  }
-  return data;
-}
+import { apiRequest } from './http';
+
+const request = (projectId, path, options = {}) =>
+  apiRequest(`/api/projects/${projectId}${path}`, options);
 
 export const getResearch = (projectId) => request(projectId, '/research');
 export const generateResearch = (projectId) =>
