@@ -25,6 +25,12 @@ module.exports = {
     primary: 'zero_authority_dao',
     secondary: 'stacks',
   },
+  // Zero Authority DAO official API — /grants, /bounties, /gigs, /quests
+  // are each paginated (see openapi spec: page/limit + meta.hasNext).
+  // These caps are a safety net against an unexpectedly huge dataset
+  // looping forever, not a documented API limit.
+  zadaoSyncPageSize: 100,
+  zadaoSyncMaxPages: 10,
 
   // Logging
   logLevel: process.env.NODE_ENV === 'production' ? 'info' : 'debug',

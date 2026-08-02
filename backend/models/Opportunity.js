@@ -17,6 +17,8 @@ const opportunitySchema = new mongoose.Schema(
       enum: [
         'grant',
         'bounty',
+        'gig',
+        'quest',
         'hackathon',
         'builder_program',
         'campaign',
