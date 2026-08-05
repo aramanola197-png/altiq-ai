@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { getProfile } from '../api/profileApi';
 import { GLASS, CARD_RADIUS } from '../theme';
+import { ALTIQ_VERSION, ALTIQ_VERSION_NOTE } from '../lib/version';
 
 function Row({ label, value }) {
   return (
@@ -83,6 +84,16 @@ export default function Settings() {
           </div>
         </div>
       </div>
-    </AppShell>
+    
+        <div className="mt-12 pt-6 border-t border-ash/30">
+          <p className="text-xs text-dark-ash">
+            ALTIQ AI <span className="font-medium text-charcoal">v{ALTIQ_VERSION}</span>
+          </p>
+          <p className="text-xs text-dark-ash mt-1 max-w-md leading-relaxed">
+            {ALTIQ_VERSION_NOTE}
+          </p>
+        </div>
+
+      </AppShell>
   );
 }

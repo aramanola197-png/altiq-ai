@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const passport = require('passport');
 const User = require('../models/User');
 const { createSendToken } = require('../utils/token');
@@ -6,8 +7,16 @@ const { protect } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
+const authAttemptLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 40 : 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'error', message: 'Too many auth attempts. Please try again later.' },
+});
+
 // Email / Password Register
-router.post('/register', async (req, res) => {
+router.post('/register', authAttemptLimiter, async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
@@ -40,7 +49,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Email / Password Login
-router.post('/login', async (req, res) => {
+router.post('/login', authAttemptLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -89,6 +98,7 @@ router.post('/logout', (req, res) => {
 // Google OAuth
 router.get(
   '/google',
+  authAttemptLimiter,
   passport.authenticate('google', { scope: ['profile', 'email'], session: false })
 );
 

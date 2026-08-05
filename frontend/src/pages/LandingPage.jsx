@@ -6,6 +6,7 @@ import {
 import { GLASS, CARD_RADIUS } from '../theme';
 import OrbitalBackground from '../components/OrbitalBackground';
 import Logo from '../components/Logo';
+import { ALTIQ_VERSION, ALTIQ_VERSION_NOTE } from '../lib/version';
 
 /* =========================================================
    ALTIQ AI — Landing Page
@@ -290,7 +291,12 @@ export default function LandingPage() {
               <Twitter size={19} />
             </a>
           </div>
+          <div className="text-center md:text-right">
           <p className="text-sm text-white/60">© 2026 ALTIQ AI. All rights reserved.</p>
+          <p className="text-[11px] text-white/45 mt-1">
+            v{ALTIQ_VERSION} · {ALTIQ_VERSION_NOTE}
+          </p>
+        </div>
         </div>
       </footer>
     </div>

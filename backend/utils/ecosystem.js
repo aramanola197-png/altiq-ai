@@ -2,21 +2,15 @@
  * Ecosystem data — Zero Authority DAO (primary) + Stacks (secondary).
  * Server-side only. Never fabricate opportunity records.
  *
- * Zero Authority DAO integration is implemented against the official
- * "Zero Authority Platform API" OpenAPI specification (v1.0.0):
- *   - Server: {ZADAO_API_BASE_URL}/api  (spec declares "/api" relative
- *     to the current origin — same domain for testnet or mainnet)
- *   - Resources: /grants, /bounties, /gigs, /quests — each paginated
- *     with `page`/`limit` query params and a `meta` object containing
- *     { page, limit, total, totalPages, hasNext, hasPrev }.
- *   - The spec defines no security scheme on these four GET list
- *     endpoints (no 401/403 responses, no auth header parameter) —
- *     they are public. The only authenticated surface found in the
- *     spec is an unrelated admin report (`/grants/Survey?report=1`),
- *     which this integration does not use. ZADAO_API_KEY is still
- *     sent as a Bearer token on every request when configured, since
- *     it's harmless if unused and may grant higher rate limits — but
- *     its absence does not block syncing, matching what's documented.
+ * Public builder-facing sources on ZADAO:
+ *   - /api/bounties  (public board at /bounty) — primary
+ *   - /api/quests    (public board at /quests)
+ *   - /api/grants    (historical / DeGrants)
+ *
+ * /api/gigs is NOT treated as a public opportunity feed. On the live
+ * site, /gigs is a private "Received gigs" contractor view (often empty
+ * for the public). Those records are completed client/worker jobs, not
+ * open calls for builders — listing them as opportunities was wrong.
  */
 const Opportunity = require('../models/Opportunity');
 const logger = require('./logger');
@@ -31,26 +25,18 @@ async function upsertOpportunity(doc) {
   );
 }
 
-/* ------------------------------------------------------------------
-   Shared helpers
------------------------------------------------------------------- */
-
-// Bounty/gig monetary values are documented as being in the token's
-// smallest unit (see /bounties query param docs: "in smallest token
-// unit"). Convert using the token's own `decimals` when present;
-// otherwise fall back to the raw value rather than guessing a
-// conversion that isn't backed by the response itself.
 function formatTokenAmount(rawAmount, token) {
   if (rawAmount === undefined || rawAmount === null) return '';
   const symbol = token && token.symbol ? token.symbol : '';
   const decimals = token && typeof token.decimals === 'number' ? token.decimals : null;
   const numeric = Number(rawAmount);
   if (Number.isNaN(numeric)) return String(rawAmount);
-  const value = decimals !== null ? numeric / 10 ** decimals : numeric;
-  const display = decimals !== null
-    ? value.toLocaleString(undefined, { maximumFractionDigits: 4 })
-    : String(numeric);
-  return symbol ? `${display} ${symbol}` : display;
+  const value =
+    decimals !== null ? numeric / Math.pow(10, decimals) : numeric;
+  const formatted = Number.isFinite(value)
+    ? value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+    : String(rawAmount);
+  return symbol ? `${formatted} ${symbol}` : formatted;
 }
 
 function personName(user) {
@@ -58,34 +44,45 @@ function personName(user) {
   return user.username || user.stxAddress || '';
 }
 
-// Derives open/closed from fields the API itself provides — never a
-// guess layered on top. Order of checks: an explicit expiry flag (if
-// present) wins, then a past end date, then the resource's own status
-// string matched against terminal-state keywords. Anything not
-// positively identified as closed is treated as open, since an
-// unrecognized status shouldn't hide a genuinely live opportunity.
+/**
+ * Derive open/closed from API fields only.
+ * Explicit isExpired / past endDate / terminal status keywords → closed.
+ * Unrecognized status defaults to open so live items are not hidden.
+ */
 function deriveStatus({ isExpired, endDate, rawStatus } = {}) {
   if (isExpired === true) return 'closed';
 
-  if (endDate) {
-    const end = new Date(endDate);
+  if (endDate != null && endDate !== '') {
+    let end;
+    if (typeof endDate === 'number') {
+      // ZADAO bounties use epoch ms; guard against accidental seconds.
+      end = new Date(endDate < 1e12 ? endDate * 1000 : endDate);
+    } else {
+      end = new Date(endDate);
+    }
     if (!Number.isNaN(end.getTime()) && end.getTime() < Date.now()) return 'closed';
   }
 
   if (rawStatus) {
     const s = String(rawStatus).toLowerCase();
-    const closedKeywords = ['completed', 'cancel', 'reject', 'closed', 'expired', 'terminated', 'archived'];
+    const closedKeywords = [
+      'completed',
+      'complete',
+      'cancel',
+      'reject',
+      'closed',
+      'expired',
+      'terminated',
+      'archived',
+      'winner',
+      'paid',
+      'done',
+    ];
     if (closedKeywords.some((k) => s.includes(k))) return 'closed';
   }
 
   return 'open';
 }
-
-/* ------------------------------------------------------------------
-   Type-specific normalizers — every field is mapped from the actual
-   OpenAPI response schema for that resource. No generic fallback
-   chains guessing at field names that may not exist.
------------------------------------------------------------------- */
 
 function normalizeGrant(raw, zBase) {
   return {
@@ -95,17 +92,13 @@ function normalizeGrant(raw, zBase) {
     title: raw.projectName || '',
     description: raw.projectDescription || '',
     organizer: personName(raw.steward) || 'Zero Authority DAO',
-    // No application-deadline field exists on the grant schema — only
-    // milestone due dates, which mean something different. Left unset
-    // rather than misrepresenting a milestone date as an application
-    // deadline.
     deadline: undefined,
-    amount: raw.awardedAmount != null
-      ? String(raw.awardedAmount)
-      : (raw.requestedAmount != null ? String(raw.requestedAmount) : ''),
-    // No per-item URL is provided by the API for any resource type.
-    // Linking to the real, confirmed DeGrants section rather than
-    // guessing an unconfirmed per-id detail path.
+    amount:
+      raw.awardedAmount != null
+        ? String(raw.awardedAmount)
+        : raw.requestedAmount != null
+          ? String(raw.requestedAmount)
+          : '',
     url: `${zBase}/funding/degrants`,
     eligibility: undefined,
     skills: [],
@@ -115,62 +108,46 @@ function normalizeGrant(raw, zBase) {
 }
 
 function normalizeBounty(raw, zBase) {
+  const id = raw.id != null ? String(raw.id) : '';
   return {
-    externalId: String(raw.id),
+    externalId: id,
     source: 'zero_authority_dao',
     type: 'bounty',
     title: raw.name || '',
     description: raw.details || '',
-    organizer: (raw.organization && raw.organization.name) || personName(raw.creator),
-    deadline: raw.endDate ? new Date(raw.endDate) : undefined,
+    organizer:
+      (raw.organization && raw.organization.name) || personName(raw.creator) || 'Zero Authority DAO',
+    deadline: raw.endDate != null ? new Date(raw.endDate < 1e12 ? raw.endDate * 1000 : raw.endDate) : undefined,
     amount: formatTokenAmount(raw.totalPayment, raw.token),
-    url: `${zBase}/bounty`,
+    // Live site detail path confirmed: /bounty/{id}
+    url: id ? `${zBase}/bounty/${id}` : `${zBase}/bounty`,
     eligibility: undefined,
     skills: [],
-    status: deriveStatus({ isExpired: raw.isExpired, endDate: raw.endDate, rawStatus: raw.status }),
-    raw,
-  };
-}
-
-function normalizeGig(raw, zBase) {
-  const firstMilestoneToken = Array.isArray(raw.milestones) && raw.milestones[0]
-    ? raw.milestones[0].token
-    : undefined;
-  return {
-    externalId: String(raw.id),
-    source: 'zero_authority_dao',
-    type: 'gig',
-    title: raw.title || '',
-    description: raw.description || '',
-    organizer: personName(raw.client),
-    deadline: raw.endDate ? new Date(raw.endDate) : undefined,
-    amount: formatTokenAmount(raw.totalValue, firstMilestoneToken),
-    url: `${zBase}/gigs`,
-    eligibility: undefined,
-    skills: [],
-    status: deriveStatus({ endDate: raw.endDate, rawStatus: raw.status }),
+    status: deriveStatus({
+      isExpired: raw.isExpired,
+      endDate: raw.endDate,
+      rawStatus: raw.status,
+    }),
     raw,
   };
 }
 
 function normalizeQuest(raw, zBase) {
-  // Quests reward reputation (and sometimes an NFT), not a token
-  // amount — represented honestly rather than forced into a
-  // currency-shaped string.
+  const id = raw.id != null ? String(raw.id) : '';
   const repPart = raw.totalRep != null ? `${raw.totalRep} REP` : '';
   const nftPart = raw.nftReward ? 'NFT' : '';
   const amount = [repPart, nftPart].filter(Boolean).join(' + ');
 
   return {
-    externalId: String(raw.id),
+    externalId: id,
     source: 'zero_authority_dao',
     type: 'quest',
     title: raw.title || '',
     description: raw.description || '',
-    organizer: personName(raw.creator) || (raw.campaign && raw.campaign.name) || '',
+    organizer: personName(raw.creator) || (raw.campaign && raw.campaign.name) || 'Zero Authority DAO',
     deadline: raw.endDate ? new Date(raw.endDate) : undefined,
     amount,
-    url: `${zBase}/quests`,
+    url: id ? `${zBase}/quests/${id}` : `${zBase}/quests`,
     eligibility: undefined,
     skills: [],
     status: deriveStatus({ endDate: raw.endDate, rawStatus: raw.status }),
@@ -178,33 +155,24 @@ function normalizeQuest(raw, zBase) {
   };
 }
 
-const RESOURCE_MAP = {
-  grants: { path: '/grants', normalize: normalizeGrant },
-  bounties: { path: '/bounties', normalize: normalizeBounty },
-  gigs: { path: '/gigs', normalize: normalizeGig },
-  quests: { path: '/quests', normalize: normalizeQuest },
-};
-
-/* ------------------------------------------------------------------
-   Paginated fetch — follows the documented meta.hasNext, capped by
-   zadaoSyncMaxPages as a safety net (not a documented API limit).
------------------------------------------------------------------- */
-async function fetchAllPages(zBase, resourcePath, headers) {
+/**
+ * Paginated fetch. Optional extraQuery is appended (e.g. status=Open).
+ */
+async function fetchAllPages(zBase, resourcePath, headers, extraQuery = '') {
   const items = [];
   let page = 1;
-  const limit = config.zadaoSyncPageSize;
+  const limit = config.zadaoSyncPageSize || 100;
+  const maxPages = config.zadaoSyncMaxPages || 10;
 
-  while (page <= config.zadaoSyncMaxPages) {
-    const url = `${zBase}/api${resourcePath}?page=${page}&limit=${limit}`;
+  while (page <= maxPages) {
+    const qs = `page=${page}&limit=${limit}${extraQuery ? `&${extraQuery}` : ''}`;
+    const url = `${zBase}/api${resourcePath}?${qs}`;
     const res = await fetch(url, {
       headers,
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!res.ok) {
-      // 400/404/500 are the documented error responses for these
-      // endpoints; surface a clear error rather than silently
-      // stopping mid-sync.
       const body = await res.json().catch(() => ({}));
       throw new Error(
         `ZADAO ${resourcePath} HTTP ${res.status}: ${body.message || body.error || 'request failed'}`
@@ -224,10 +192,11 @@ async function fetchAllPages(zBase, resourcePath, headers) {
 }
 
 /**
- * Attempt live sync. Without ZADAO_API_BASE_URL configured, returns
- * gracefully with zero invented rows. Each resource type (grants,
- * bounties, gigs, quests) is synced independently so one failing
- * doesn't block the others.
+ * Live sync from official ZADAO public boards.
+ * - Bounties: prefer status=Open (public board), then mark stale opens closed
+ * - Quests: full list
+ * - Grants: limited pages (mostly historical)
+ * - Gigs: not synced (not a public opportunity board)
  */
 async function syncOpportunities() {
   const results = { synced: 0, errors: [], sources: [], byType: {} };
@@ -235,47 +204,139 @@ async function syncOpportunities() {
   const zBaseRaw = process.env.ZADAO_API_BASE_URL;
   const zKey = process.env.ZADAO_API_KEY;
 
-  if (zBaseRaw) {
-    const zBase = zBaseRaw.replace(/\/$/, '');
-    const headers = { Accept: 'application/json' };
-    // Not required by the documented spec for these endpoints, but
-    // sent whenever configured — see file header for why.
-    if (zKey) headers.Authorization = `Bearer ${zKey}`;
+  if (!zBaseRaw) {
+    logger.debug('zadao_base_url_missing');
+    return results;
+  }
 
-    let anySucceeded = false;
+  const zBase = zBaseRaw.replace(/\/$/, '');
+  const headers = { Accept: 'application/json' };
+  if (zKey) headers.Authorization = `Bearer ${zKey}`;
 
-    for (const [resourceName, { path, normalize }] of Object.entries(RESOURCE_MAP)) {
-      try {
-        const rawItems = await fetchAllPages(zBase, path, headers);
-        let count = 0;
-        for (const raw of rawItems) {
-          const normalized = normalize(raw, zBase);
-          if (normalized.externalId && normalized.title) {
-            await upsertOpportunity(normalized);
-            count += 1;
-          }
-        }
-        results.synced += count;
-        results.byType[resourceName] = count;
-        anySucceeded = true;
-        logger.info('zadao_resource_sync_ok', { resource: resourceName, count });
-      } catch (err) {
-        logger.error('zadao_resource_sync_failed', { resource: resourceName, error: err.message });
-        results.errors.push(resourceName);
+  let anySucceeded = false;
+
+  // --- Bounties (public) — Open first so live items always land ---
+  try {
+    const openRaw = await fetchAllPages(zBase, '/bounties', headers, 'status=Open');
+    const openIds = [];
+    let bountyCount = 0;
+
+    for (const raw of openRaw) {
+      const normalized = normalizeBounty(raw, zBase);
+      // Force open when API Open filter returned them and not expired
+      if (raw.isExpired !== true && String(raw.status || '').toLowerCase() === 'open') {
+        normalized.status = 'open';
+      }
+      if (normalized.externalId && normalized.title) {
+        await upsertOpportunity(normalized);
+        openIds.push(normalized.externalId);
+        bountyCount += 1;
       }
     }
 
-    if (anySucceeded) results.sources.push('zero_authority_dao');
-  } else {
-    logger.debug('zadao_base_url_missing');
+    // Any previously open bounty no longer in the Open list → closed
+    if (openIds.length >= 0) {
+      await Opportunity.updateMany(
+        {
+          source: 'zero_authority_dao',
+          type: 'bounty',
+          status: 'open',
+          externalId: { $nin: openIds },
+        },
+        { $set: { status: 'closed', lastSyncedAt: new Date() } }
+      );
+    }
+
+    // Recently closed / expired sample (first pages, no status filter)
+    // so the UI can show a few "just ended" items without pulling all 393.
+    try {
+      const recentRaw = await fetchAllPages(zBase, '/bounties', headers, '');
+      // Only upsert items that derive to closed and have a recent deadline
+      const cutoff = Date.now() - 45 * 24 * 60 * 60 * 1000;
+      let extra = 0;
+      for (const raw of recentRaw.slice(0, 100)) {
+        const normalized = normalizeBounty(raw, zBase);
+        if (normalized.status !== 'closed') continue;
+        if (normalized.deadline && normalized.deadline.getTime() < cutoff) continue;
+        if (normalized.externalId && normalized.title) {
+          await upsertOpportunity(normalized);
+          extra += 1;
+        }
+      }
+      bountyCount += extra;
+    } catch (err) {
+      logger.warn('zadao_bounty_recent_pass_failed', { error: err.message });
+    }
+
+    results.synced += bountyCount;
+    results.byType.bounties = bountyCount;
+    anySucceeded = true;
+    logger.info('zadao_resource_sync_ok', { resource: 'bounties', count: bountyCount, open: openIds.length });
+  } catch (err) {
+    logger.error('zadao_resource_sync_failed', { resource: 'bounties', error: err.message });
+    results.errors.push('bounties');
   }
 
-  // Secondary: official Stacks-related endpoints if configured
+  // --- Quests (public) ---
+  try {
+    const rawItems = await fetchAllPages(zBase, '/quests', headers);
+    let count = 0;
+    for (const raw of rawItems) {
+      const normalized = normalizeQuest(raw, zBase);
+      if (normalized.externalId && normalized.title) {
+        await upsertOpportunity(normalized);
+        count += 1;
+      }
+    }
+    results.synced += count;
+    results.byType.quests = count;
+    anySucceeded = true;
+    logger.info('zadao_resource_sync_ok', { resource: 'quests', count });
+  } catch (err) {
+    logger.error('zadao_resource_sync_failed', { resource: 'quests', error: err.message });
+    results.errors.push('quests');
+  }
+
+  // --- Grants (mostly historical; keep for completeness) ---
+  try {
+    const rawItems = await fetchAllPages(zBase, '/grants', headers);
+    let count = 0;
+    for (const raw of rawItems) {
+      const normalized = normalizeGrant(raw, zBase);
+      if (normalized.externalId && normalized.title) {
+        await upsertOpportunity(normalized);
+        count += 1;
+      }
+    }
+    results.synced += count;
+    results.byType.grants = count;
+    anySucceeded = true;
+    logger.info('zadao_resource_sync_ok', { resource: 'grants', count });
+  } catch (err) {
+    logger.error('zadao_resource_sync_failed', { resource: 'grants', error: err.message });
+    results.errors.push('grants');
+  }
+
+  // --- Remove gigs from public cache (not a public opportunity board) ---
+  try {
+    const removed = await Opportunity.deleteMany({
+      source: 'zero_authority_dao',
+      type: 'gig',
+    });
+    if (removed.deletedCount) {
+      logger.info('zadao_gigs_removed_from_public_cache', { deleted: removed.deletedCount });
+      results.byType.gigs_removed = removed.deletedCount;
+    }
+  } catch (err) {
+    logger.warn('zadao_gigs_cleanup_failed', { error: err.message });
+  }
+
+  if (anySucceeded) results.sources.push('zero_authority_dao');
+
+  // Stacks connectivity probe only
   const sBase = process.env.STACKS_API_BASE_URL;
   if (sBase) {
     try {
-      // Connectivity probe only — Stacks chain txs are never treated
-      // as grants/bounties/gigs/quests.
       const url = `${sBase.replace(/\/$/, '')}/extended/v1/tx`;
       const res = await fetch(url + '?limit=1', {
         headers: { Accept: 'application/json' },
@@ -300,21 +361,16 @@ const RECENTLY_CLOSED_WINDOW_DAYS = 30;
 const RECENTLY_CLOSED_MAX = 5;
 
 /**
- * Default listing behavior (no explicit status filter requested):
- * every open opportunity (sorted soonest-deadline-first, no artificial
- * cap — if 40 are genuinely open, all 40 come back), plus a small
- * number of opportunities that closed recently (so a bounty someone
- * just missed isn't invisible), badged separately by the frontend via
- * `status`. Anything closed longer than RECENTLY_CLOSED_WINDOW_DAYS
- * ago — including years-old records — is excluded entirely rather
- * than clutter the list with stale closed items.
+ * List cached opportunities.
+ * Default: all open (bounty/quest/grant — never gigs), plus a few recently closed.
  */
 async function listCachedOpportunities({ type, status, limit } = {}) {
-  const baseQuery = {};
+  const baseQuery = {
+    // Gigs are not public opportunities
+    type: type || { $in: ['bounty', 'quest', 'grant', 'hackathon', 'builder_program', 'campaign', 'challenge', 'incentive', 'funding', 'other'] },
+  };
   if (type) baseQuery.type = type;
 
-  // Explicit status filter requested (e.g. an admin/debug view) —
-  // honor it directly instead of the smart open+recent default.
   if (status) {
     const query = { ...baseQuery, status };
     const q = Opportunity.find(query).sort({ deadline: 1, lastSyncedAt: -1 });
@@ -330,9 +386,12 @@ async function listCachedOpportunities({ type, status, limit } = {}) {
   const recentlyClosed = await Opportunity.find({
     ...baseQuery,
     status: 'closed',
-    deadline: { $gte: recentCutoff },
+    $or: [
+      { deadline: { $gte: recentCutoff } },
+      { deadline: null, lastSyncedAt: { $gte: recentCutoff } },
+    ],
   })
-    .sort({ deadline: -1 })
+    .sort({ deadline: -1, lastSyncedAt: -1 })
     .limit(RECENTLY_CLOSED_MAX);
 
   return [...openItems, ...recentlyClosed];

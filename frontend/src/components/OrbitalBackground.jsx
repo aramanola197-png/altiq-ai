@@ -47,8 +47,8 @@ export default function OrbitalBackground({ intensity = 1 }) {
         y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        r: Math.random() * 1.2 + 0.5,
-        alpha: Math.random() * 0.35 + 0.22, // kept soft, not bold
+        r: Math.random() * 1.5 + 0.7,
+        alpha: Math.random() * 0.45 + 0.38, // slightly bolder, still premium
         twinkle: Math.random() * Math.PI * 2,
       };
     }
@@ -56,7 +56,7 @@ export default function OrbitalBackground({ intensity = 1 }) {
     // Fill the screen immediately on load (random positions anywhere),
     // rather than starting empty and waiting for edge-spawned particles
     // to drift in.
-    const particleCount = Math.floor((isMobile ? 60 : 100) * intensity);
+    const particleCount = Math.floor((isMobile ? 75 : 130) * intensity);
     for (let i = 0; i < particleCount; i++) {
       particles.push(spawnParticle(Math.random() * canvas.width, Math.random() * canvas.height));
     }
@@ -79,11 +79,11 @@ export default function OrbitalBackground({ intensity = 1 }) {
         const a = p.alpha * (0.6 + 0.4 * Math.sin(p.twinkle)) * intensity;
 
         ctx.save();
-        ctx.shadowColor = `rgba(94, 94, 94, ${a})`;
-        ctx.shadowBlur = 5;
+        ctx.shadowColor = `rgba(70, 70, 70, ${a})`;
+        ctx.shadowBlur = 7;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(94, 94, 94, ${a})`;
+        ctx.fillStyle = `rgba(70, 70, 70, ${a})`;
         ctx.fill();
         ctx.restore();
       });

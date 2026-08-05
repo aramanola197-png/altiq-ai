@@ -29,14 +29,11 @@ connectDB();
 
 const app = express();
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  message: { status: 'error', message: 'Too many auth attempts. Please try again later.' },
-});
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests, please try again later.' },
 });
 app.use('/api', limiter);
@@ -63,7 +60,7 @@ app.use(
 
 app.use(passport.initialize());
 
-app.use('/api/auth', authLimiter, require('./routes/auth.routes'));
+app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/profile', require('./routes/profile.routes'));
 app.use('/api/projects', require('./routes/projects.routes'));
 app.use('/api/projects/:projectId/chat', require('./routes/chat.routes'));

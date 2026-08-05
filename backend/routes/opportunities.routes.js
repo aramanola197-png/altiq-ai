@@ -95,50 +95,76 @@ router.get('/:id', async (req, res) => {
  */
 router.get('/match/:projectId', loadProject, async (req, res) => {
   try {
-    const opportunities = await listCachedOpportunities({ limit: 30 });
-    if (opportunities.length === 0) {
-      return res.status(200).json({
-        status: 'success',
-        matches: [],
-        meta: {
-          message:
-            'No official opportunities are currently available to match. Configure Zero Authority DAO / Stacks credentials and sync, or check back after the next refresh.',
-        },
-      });
-    }
+    // Only open, public opportunity types — never closed gigs or private jobs.
+    const all = await listCachedOpportunities({ limit: 80 });
+    const openPool = all.filter(
+      (o) =>
+        o.status === 'open' &&
+        ['bounty', 'quest', 'grant', 'hackathon', 'builder_program', 'campaign', 'challenge', 'incentive', 'funding'].includes(
+          o.type
+        )
+    );
 
     const profile = await BuilderProfile.findOne({ user: req.user._id });
     const project = req.project;
 
-    // Build a concise context for matching explanation
+    const funding = {
+      title: 'Zero Authority DeGrants',
+      description:
+        'DeGrants is Zero Authority DAO’s funding program for builders in the Stacks ecosystem. Review eligibility, past awards, and application guidance on the official funding page. ALTIQ AI does not submit applications for you.',
+      url: `${(process.env.ZADAO_API_BASE_URL || 'https://zeroauthoritydao.com').replace(/\/$/, '')}/funding/degrants`,
+      type: 'funding',
+    };
+
+    if (openPool.length === 0) {
+      return res.status(200).json({
+        status: 'success',
+        matches: [],
+        funding,
+        meta: {
+          openCount: 0,
+          message:
+            'No open matched opportunities right now. Sync official sources from the Opportunities page (open bounties from Zero Authority DAO). Closed or private gigs are never listed here. You can still review DeGrants funding below.',
+        },
+      });
+    }
+
     const context = {
       project: {
         name: project.name,
         description: project.description,
         stage: project.stage,
         stacksIntegration: project.stacksIntegration,
+        problem: project.problem,
         interests: profile?.projectInterests || [],
         skills: profile?.skills || [],
         goals: profile?.goals || [],
       },
-      opportunities: opportunities.slice(0, 15).map((o) => ({
-        id: o._id,
+      opportunities: openPool.slice(0, 20).map((o) => ({
+        id: String(o._id),
         title: o.title,
         type: o.type,
+        status: o.status,
         description: (o.description || '').slice(0, 280),
         organizer: o.organizer,
         deadline: o.deadline,
+        url: o.url,
       })),
     };
 
     let matches = [];
     try {
       const prompt = `
-You are ALTIQ AI Opportunity Advisor for the Stacks ecosystem and Zero Authority DAO.
-Given the builder/project context and the official opportunities list, return a JSON array of matches.
-For each match include: opportunityId, score (0-100), whyMatches (array of short reasons), missingRequirements (array), suggestedImprovements (array), estimatedReadiness (0-100).
-Only match against the provided opportunities. Never invent opportunities.
-Return ONLY valid JSON array, no markdown.
+You are ALTIQ AI Opportunity Advisor for Stacks and Zero Authority DAO.
+Match the builder/project only against the OPEN opportunities provided.
+Return a JSON array. Each item:
+  opportunityId (must be one of the provided ids),
+  score (0-100),
+  whyMatches (string array),
+  missingRequirements (string array),
+  suggestedImprovements (string array),
+  estimatedReadiness (0-100).
+Never invent opportunities. Prefer stronger relevance. Return ONLY a JSON array.
 
 Context:
 ${JSON.stringify(context, null, 2)}
@@ -150,29 +176,54 @@ ${JSON.stringify(context, null, 2)}
       if (!Array.isArray(matches)) matches = [];
     } catch (aiErr) {
       logger.warn('match_ai_fallback', { error: aiErr.message });
-      // Graceful fallback: return opportunities with neutral score and honest note
-      matches = opportunities.slice(0, 10).map((o) => ({
+      matches = openPool.slice(0, 8).map((o) => ({
         opportunityId: o._id,
-        score: null,
-        whyMatches: ['Official opportunity available in the Stacks / Zero Authority ecosystem.'],
-        missingRequirements: ['Detailed match scoring temporarily unavailable.'],
-        suggestedImprovements: ['Complete project documentation and branding to improve readiness.'],
-        estimatedReadiness: null,
+        score: 40,
+        whyMatches: [
+          `Open ${o.type} from ${o.organizer || 'Zero Authority DAO'} in the Stacks ecosystem.`,
+        ],
+        missingRequirements: [],
+        suggestedImprovements: [
+          'Complete project documentation and branding to strengthen readiness.',
+          'Clarify Stacks / Clarity integration in the project description.',
+        ],
+        estimatedReadiness: 25,
       }));
     }
 
-    // Attach opportunity documents
-    const byId = Object.fromEntries(opportunities.map((o) => [String(o._id), o]));
+    const byId = {};
+    openPool.forEach((o) => {
+      byId[String(o._id)] = o;
+    });
+
     const enriched = matches
       .map((m) => ({
         ...m,
         opportunity: byId[String(m.opportunityId)] || null,
       }))
-      .filter((m) => m.opportunity);
+      .filter((m) => m.opportunity && m.opportunity.status === 'open')
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
 
-    await logActivity(project._id, req.user._id, 'opportunity_match', `Matched ${enriched.length} opportunities`);
+    await logActivity(
+      project._id,
+      req.user._id,
+      'opportunity_match',
+      `Matched ${enriched.length} open opportunities`
+    );
 
-    res.status(200).json({ status: 'success', matches: enriched });
+    res.status(200).json({
+      status: 'success',
+      matches: enriched,
+      funding,
+      meta: {
+        openCount: openPool.length,
+        matchCount: enriched.length,
+        message:
+          enriched.length === 0
+            ? 'Open opportunities exist in the cache, but none scored as a fit for this project yet. Refine the project description, skills, and Stacks integration, then try again.'
+            : undefined,
+      },
+    });
   } catch (err) {
     logger.error('match_failed', { error: err.message });
     res.status(500).json({ status: 'error', message: 'Could not compute opportunity matches.' });

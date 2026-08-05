@@ -7,6 +7,20 @@ export default function Overview() {
 
   return (
     <div className="space-y-6">
+      <GlassCard className="p-7 sm:p-8">
+        <h3 className="font-heading font-semibold mb-3 text-black">About this project</h3>
+        <p className="text-charcoal text-sm leading-relaxed mb-3">
+          {project.description ||
+            'This project is still taking shape. Use AI, Research, and Branding to clarify what you are building and why it matters in the Stacks ecosystem.'}
+        </p>
+        <p className="text-dark-ash text-sm leading-relaxed">
+          ALTIQ AI is built to walk founders from idea to research, validation, branding, product
+          planning, documentation, opportunity discovery, and submission prep — with Zero Authority
+          DAO and Stacks as the primary environment. Nothing here invents grants or bounties; every
+          matched opportunity must come from official sources after you sync them.
+        </p>
+      </GlassCard>
+
       <div className="grid sm:grid-cols-2 gap-6">
         <GlassCard className="p-7">
           <h3 className="font-heading font-semibold mb-3 text-black">Stage</h3>

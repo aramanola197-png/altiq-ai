@@ -27,8 +27,8 @@ export default function Opportunities() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const data = await syncOpportunities();
-      addToast(data.message || 'Sync complete.');
+      await syncOpportunities();
+      addToast('Sync is complete. Please refresh the page.');
       await load();
     } catch (err) {
       addToast(err.message);
@@ -44,7 +44,7 @@ export default function Opportunities() {
           <div>
             <h1 className="font-heading text-3xl font-bold mb-2">Opportunities</h1>
             <p className="text-dark-ash text-sm">
-              Official grants, bounties, and programs from Zero Authority DAO and Stacks only.
+              Open bounties and programs from Zero Authority DAO (and Stacks when available). Gigs are private contractor jobs and are not listed here.
             </p>
           </div>
           <button
@@ -90,7 +90,7 @@ export default function Opportunities() {
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="text-xs uppercase tracking-wide text-dark-ash">{o.type}</span>
+                      <span className="text-xs uppercase tracking-wide text-dark-ash">{o.type === "bounty" ? "Bounty" : o.type === "quest" ? "Quest" : o.type === "grant" ? "Grant" : o.type}</span>
                       <span className="text-xs text-dark-ash">· {o.source?.replace(/_/g, ' ')}</span>
                       {o.status === 'closed' && (
                         <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-charcoal text-white">

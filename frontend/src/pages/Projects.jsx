@@ -124,13 +124,19 @@ export default function Projects() {
                 to={`/projects/${p._id}`}
                 className="block transition-transform duration-300 hover:-translate-y-1"
               >
-                <GlassCard className="p-7 h-full">
-                  <h3 className="font-heading font-semibold text-lg mb-2">{p.name}</h3>
-                  <p className="text-charcoal text-sm line-clamp-2 mb-4">
-                    {p.description || 'No description yet.'}
+                <GlassCard className="p-7 h-full flex flex-col">
+                  <h3 className="font-heading font-semibold text-lg mb-2 text-black">{p.name}</h3>
+                  <p className="text-charcoal text-sm leading-relaxed mb-3 line-clamp-3">
+                    {p.description ||
+                      'No description yet. Open the workspace to define the problem, audience, and Stacks integration.'}
                   </p>
-                  <div className="flex items-center justify-between text-xs text-dark-ash">
-                    <span className="capitalize">{p.stage}</span>
+                  <p className="text-dark-ash text-xs leading-relaxed mb-4 flex-1">
+                    This workspace guides you from idea through research, branding, documentation,
+                    opportunity matching, and submission prep inside the Stacks and Zero Authority
+                    DAO ecosystem — without inventing grants or bounties.
+                  </p>
+                  <div className="flex items-center justify-between text-xs text-dark-ash pt-1 border-t border-ash/20">
+                    <span className="capitalize font-medium text-charcoal">{p.stage}</span>
                     <span>{new Date(p.updatedAt).toLocaleDateString()}</span>
                   </div>
                 </GlassCard>
