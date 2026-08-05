@@ -92,7 +92,7 @@ export default function AppShell({ children }) {
 
       <div className="flex-1 flex flex-col min-w-0">
         <main className="flex-1 pt-16 lg:pt-0 overflow-x-hidden relative z-10">
-          {true && (
+          {(location.pathname.startsWith('/projects')) && (
             <div className="px-4 sm:px-8 pt-6">
               <BackButton />
             </div>
@@ -102,7 +102,8 @@ export default function AppShell({ children }) {
 
         {/* Footer — same dark band as the landing page, now present on every
             authenticated page too, not just the public site. */}
-        <footer className="relative z-10 py-7 px-5" style={{ backgroundColor: '#1C1C1C' }}>
+        {(location.pathname === '/settings' || location.pathname === '/dashboard' || location.pathname === '/opportunities') && (
+          <footer className="relative z-10 py-7 px-5" style={{ backgroundColor: '#1C1C1C' }}>
           <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-5">
             <Logo size={24} textClassName="text-white text-sm" variant="light" />
             <div className="flex gap-8 text-sm text-white/70">
@@ -124,6 +125,7 @@ export default function AppShell({ children }) {
             </div>
           </div>
         </footer>
+        )}
       </div>
     </div>
   );

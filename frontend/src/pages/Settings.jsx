@@ -3,15 +3,14 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
-import { getProfile } from '../api/profileApi';
+import { getProfile, getMetrics } from '../api/profileApi';
 import { GLASS, CARD_RADIUS } from '../theme';
-import { ALTIQ_VERSION, ALTIQ_VERSION_NOTE } from '../lib/version';
 
 function Row({ label, value }) {
   return (
     <div className="flex justify-between gap-4">
       <span className="text-dark-ash">{label}</span>
-      <span className="text-right">{value || '—'}</span>
+      <span className="text-right text-charcoal">{value || '—'}</span>
     </div>
   );
 }
@@ -21,12 +20,15 @@ export default function Settings() {
   const { addToast } = useToast();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
+  const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getProfile()
-      .then((res) => setProfile(res.profile))
-      .catch(() => {})
+    Promise.all([getProfile().catch(() => ({ profile: null })), getMetrics().catch(() => ({ metrics: null }))])
+      .then(([profRes, metRes]) => {
+        setProfile(profRes?.profile || null);
+        setMetrics(metRes?.metrics || null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -35,6 +37,8 @@ export default function Settings() {
     addToast('Successfully signed out.');
     navigate('/');
   };
+
+  const c = metrics?.counts;
 
   return (
     <AppShell>
@@ -50,6 +54,55 @@ export default function Settings() {
               <Row label="Auth provider" value={user?.authProvider} />
               <Row label="Profile complete" value={user?.isProfileComplete ? 'Yes' : 'No'} />
             </div>
+          </div>
+
+          <div className="p-8" style={{ ...GLASS, ...CARD_RADIUS }}>
+            <h2 className="font-heading font-semibold mb-2">Your activity</h2>
+            <p className="text-dark-ash text-xs mb-5">
+              Built from your projects and workspace actions — not estimates.
+            </p>
+            {loading ? (
+              <p className="text-dark-ash text-sm">Loading…</p>
+            ) : metrics ? (
+              <>
+                <p className="text-charcoal text-sm leading-relaxed mb-6">{metrics.summary}</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                  {[
+                    ['Projects', c?.projects],
+                    ['AI chats', c?.aiChats],
+                    ['Research', c?.research],
+                    ['Brand', c?.brand],
+                    ['Documents', c?.documents],
+                    ['Matches', c?.matches],
+                  ].map(([label, val]) => (
+                    <div
+                      key={label}
+                      className="rounded-2xl border border-ash/25 px-4 py-3 bg-white/40"
+                    >
+                      <p className="text-dark-ash text-xs mb-1">{label}</p>
+                      <p className="font-heading font-semibold text-black text-lg">{val ?? 0}</p>
+                    </div>
+                  ))}
+                </div>
+                {metrics.recent?.length > 0 && (
+                  <div className="mt-6 pt-5 border-t border-ash/20">
+                    <p className="text-xs uppercase tracking-wide text-dark-ash mb-3">Recent actions</p>
+                    <ul className="space-y-2 text-sm text-charcoal">
+                      {metrics.recent.slice(0, 5).map((r, i) => (
+                        <li key={i} className="flex justify-between gap-3">
+                          <span className="truncate">{r.details || r.action}</span>
+                          <span className="text-dark-ash text-xs shrink-0">
+                            {r.at ? new Date(r.at).toLocaleDateString() : ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-dark-ash text-sm">Activity metrics will appear as you use the workspace.</p>
+            )}
           </div>
 
           <div className="p-8" style={{ ...GLASS, ...CARD_RADIUS }}>
@@ -77,23 +130,19 @@ export default function Settings() {
 
           <div className="p-8" style={{ ...GLASS, ...CARD_RADIUS }}>
             <h2 className="font-heading font-semibold mb-4">Session</h2>
-            <p className="text-charcoal text-sm mb-6">Your session is sliding and will remain active with regular use. Explicit sign-out ends it immediately.</p>
-            <button onClick={handleLogout} className="px-6 py-3 rounded-full border border-ash/30 text-sm font-medium hover:bg-black/5 transition">
+            <p className="text-charcoal text-sm mb-6">
+              Your session is sliding and will remain active with regular use. Explicit sign-out ends
+              it immediately.
+            </p>
+            <button
+              onClick={handleLogout}
+              className="px-6 py-3 rounded-full border border-ash/30 text-sm font-medium hover:bg-black/5 transition"
+            >
               Sign out
             </button>
           </div>
         </div>
       </div>
-    
-        <div className="mt-12 pt-6 border-t border-ash/30">
-          <p className="text-xs text-dark-ash">
-            ALTIQ AI <span className="font-medium text-charcoal">v{ALTIQ_VERSION}</span>
-          </p>
-          <p className="text-xs text-dark-ash mt-1 max-w-md leading-relaxed">
-            {ALTIQ_VERSION_NOTE}
-          </p>
-        </div>
-
-      </AppShell>
+    </AppShell>
   );
 }

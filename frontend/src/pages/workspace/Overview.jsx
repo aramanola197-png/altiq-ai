@@ -1,24 +1,64 @@
 import React from 'react';
-import { useOutletContext, Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { GlassCard } from '../../components/Glass';
+
+function buildAbout(project) {
+  const name = project.name || 'This project';
+  const desc = (project.description || '').trim();
+  const problem = (project.problem || '').trim();
+  const audience = (project.targetAudience || '').trim();
+  const stacks = (project.stacksIntegration || '').trim();
+  const mission = (project.mission || '').trim();
+  const stage = project.stage || 'idea';
+
+  const parts = [];
+
+  if (desc) {
+    parts.push(desc);
+  } else {
+    parts.push(
+      `${name} is in the ${stage} stage. Capture a clear description in the project details so research, branding, and opportunity matching stay accurate.`
+    );
+  }
+
+  if (problem) {
+    parts.push(`Problem it addresses: ${problem}`);
+  }
+  if (audience) {
+    parts.push(`Who it is for: ${audience}`);
+  }
+  if (stacks) {
+    parts.push(`Stacks / ecosystem angle: ${stacks}`);
+  }
+  if (mission) {
+    parts.push(`Mission: ${mission}`);
+  }
+
+  if (!problem && !audience && !stacks) {
+    parts.push(
+      'Use the AI workspace and Research tabs to refine the problem, audience, and how this idea connects to Stacks and Zero Authority DAO — then return here to see the overview update.'
+    );
+  }
+
+  return parts;
+}
 
 export default function Overview() {
   const { project } = useOutletContext();
+  const aboutParts = buildAbout(project);
 
   return (
     <div className="space-y-6">
       <GlassCard className="p-7 sm:p-8">
         <h3 className="font-heading font-semibold mb-3 text-black">About this project</h3>
-        <p className="text-charcoal text-sm leading-relaxed mb-3">
-          {project.description ||
-            'This project is still taking shape. Use AI, Research, and Branding to clarify what you are building and why it matters in the Stacks ecosystem.'}
-        </p>
-        <p className="text-dark-ash text-sm leading-relaxed">
-          ALTIQ AI is built to walk founders from idea to research, validation, branding, product
-          planning, documentation, opportunity discovery, and submission prep — with Zero Authority
-          DAO and Stacks as the primary environment. Nothing here invents grants or bounties; every
-          matched opportunity must come from official sources after you sync them.
-        </p>
+        <p className="text-xs uppercase tracking-wide text-dark-ash mb-3">{project.name}</p>
+        <div className="space-y-3">
+          {aboutParts.map((p, i) => (
+            <p key={i} className="text-charcoal text-sm leading-relaxed">
+              {p}
+            </p>
+          ))}
+        </div>
       </GlassCard>
 
       <div className="grid sm:grid-cols-2 gap-6">
@@ -28,7 +68,9 @@ export default function Overview() {
         </GlassCard>
         <GlassCard className="p-7">
           <h3 className="font-heading font-semibold mb-3 text-black">Workspace</h3>
-          <p className="text-charcoal text-sm">Use the tabs above for AI, research, brand, docs, and submission prep.</p>
+          <p className="text-charcoal text-sm">
+            Use the tabs above for AI, research, brand, docs, and submission prep for {project.name}.
+          </p>
         </GlassCard>
       </div>
 
@@ -59,7 +101,8 @@ export default function Overview() {
       <GlassCard className="p-7">
         <h3 className="font-heading font-semibold mb-3 text-black">Next steps</h3>
         <p className="text-charcoal text-sm mb-4">
-          Start with AI or Research, refine branding and documentation, then match official opportunities and prepare a submission draft.
+          Deepen {project.name} with AI or Research, then branding and documentation before matching
+          open opportunities.
         </p>
         <div className="flex flex-wrap gap-3">
           <Link

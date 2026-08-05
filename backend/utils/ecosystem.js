@@ -119,8 +119,9 @@ function normalizeBounty(raw, zBase) {
       (raw.organization && raw.organization.name) || personName(raw.creator) || 'Zero Authority DAO',
     deadline: raw.endDate != null ? new Date(raw.endDate < 1e12 ? raw.endDate * 1000 : raw.endDate) : undefined,
     amount: formatTokenAmount(raw.totalPayment, raw.token),
-    // Live site detail path confirmed: /bounty/{id}
-    url: id ? `${zBase}/bounty/${id}` : `${zBase}/bounty`,
+    // Official board always works. ZADAO SPA /bounty/{id} returns "Bounty not found"
+    // for many IDs that still exist in the public API — so we link the board.
+    url: `${zBase}/bounty`,
     eligibility: undefined,
     skills: [],
     status: deriveStatus({
@@ -128,7 +129,7 @@ function normalizeBounty(raw, zBase) {
       endDate: raw.endDate,
       rawStatus: raw.status,
     }),
-    raw,
+    raw: { ...raw, detailPath: id ? `/bounty/${id}` : '/bounty' },
   };
 }
 
@@ -366,10 +367,15 @@ const RECENTLY_CLOSED_MAX = 5;
  */
 async function listCachedOpportunities({ type, status, limit } = {}) {
   const baseQuery = {
-    // Gigs are not public opportunities
-    type: type || { $in: ['bounty', 'quest', 'grant', 'hackathon', 'builder_program', 'campaign', 'challenge', 'incentive', 'funding', 'other'] },
+    // Gigs are never public opportunities (private contractor jobs on ZADAO)
+    type: type
+      ? type
+      : { $in: ['bounty', 'quest', 'grant', 'hackathon', 'builder_program', 'campaign', 'challenge', 'incentive', 'funding', 'other'] },
   };
-  if (type) baseQuery.type = type;
+  // Hard safety: if caller asks for gig, return empty rather than leak private jobs
+  if (type === 'gig') {
+    return [];
+  }
 
   if (status) {
     const query = { ...baseQuery, status };

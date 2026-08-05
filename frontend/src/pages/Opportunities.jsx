@@ -15,7 +15,10 @@ export default function Opportunities() {
   const load = () =>
     listOpportunities()
       .then((data) => {
-        setItems(data.opportunities || []);
+        const list = (data.opportunities || []).filter(
+          (o) => o.type !== 'gig' && o.type !== 'GIG'
+        );
+        setItems(list);
         setMeta(data.meta || null);
       })
       .catch((err) => addToast(err.message));
@@ -123,8 +126,10 @@ export default function Opportunities() {
           </div>
         )}
 
-        <p className="text-xs text-dark-ash mt-10">
-          To match opportunities to a specific project, open the project workspace and use Submission preparation after matches are available.
+        <p className="text-xs text-dark-ash mt-10 leading-relaxed max-w-2xl">
+          Official resource links open the Zero Authority DAO Bounties board — the public list where these opportunities appear.
+          Some per-bounty detail pages on ZADAO show “Bounty not found” even for valid open items; the board is the reliable entry point.
+          Search or scan the board for the title shown on each card. To match opportunities to a project, open the project workspace → Submission.
         </p>
       </div>
     </AppShell>
